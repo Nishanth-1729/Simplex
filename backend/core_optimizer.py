@@ -1,8 +1,3 @@
-"""
-Core Optimizer Module
-Person 3: Fundamental optimization
-"""
-
 import cvxpy as cp
 import numpy as np
 import time
