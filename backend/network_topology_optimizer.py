@@ -64,10 +64,10 @@ class NetworkTopologyOptimizer:
         router1_capacity: float,
         router2_capacity: float
     ) -> List[str]:
-        "
+        """
         This is the building the hierarchical 4 layer network 
         Structure: Source → Core Routers → Edge Routers → Users
-        "
+        """
         print(f"\n{'='*60}")
         print(f" BUILDING HIERARCHICAL NETWORK")
         print(f"{'='*60}")
@@ -154,7 +154,6 @@ class NetworkTopologyOptimizer:
         return user_ids
     
     def get_network_summary(self) -> Dict:
-        """Get network statistics."""
         node_counts = {}
         for node in self.nodes.values():
             node_counts[node.node_type.value] = node_counts.get(node.node_type.value, 0) + 1
@@ -178,3 +177,69 @@ class NetworkTopologyOptimizer:
                 'total_demand_volume': sum(d.demand for d in self.traffic_demands)
             }
         }
+
+        # Adding this method inside NetworkTopologyOptimizer class
+        # Add this method inside NetworkTopologyOptimizer class
+
+def _calculate_network_metrics(self) -> Dict:
+    """Calculate comprehensive network performance metrics"""
+    
+    # Link utilization
+    utilizations = []
+    for edge, link in self.links.items():
+        if link.capacity > 0:
+            util = link.current_load / link.capacity
+            utilizations.append(util)
+    
+    avg_util = np.mean(utilizations) if utilizations else 0
+    max_util = np.max(utilizations) if utilizations else 0
+    
+    # Demand satisfaction
+    satisfied_demands = 0
+    total_latencies = []
+    allocated_flows = []
+    
+    for demand in self.traffic_demands:
+        if demand.id in self.paths:
+            paths = self.paths[demand.id]
+            if paths:
+                primary_path = paths[0]
+                metrics = self.compute_path_metrics(primary_path)
+                
+                # Calculate allocated bandwidth for this demand
+                demand_flow = sum(
+                    flow for (did, src, dst), flow in self.flows.items()
+                    if did == demand.id
+                )
+                allocated_flows.append(demand_flow)
+                
+                if metrics['latency'] <= demand.max_latency and metrics['reliability'] >= demand.min_reliability:
+                    satisfied_demands += 1
+                
+                total_latencies.append(metrics['latency'])
+    
+    avg_latency = np.mean(total_latencies) if total_latencies else 0
+    
+    # Calculate Jain's Fairness Index
+    jains_fairness = 0.0
+    if allocated_flows:
+        n = len(allocated_flows)
+        sum_x = np.sum(allocated_flows)
+        sum_x2 = np.sum(np.array(allocated_flows) ** 2)
+        if sum_x2 > 0:
+            jains_fairness = (sum_x ** 2) / (n * sum_x2)
+    
+    # Congestion detection
+    congested_links = sum(1 for u in utilizations if u > 0.8)
+    
+    return {
+        'avg_link_utilization': avg_util,
+        'max_link_utilization': max_util,
+        'demands_satisfied': satisfied_demands,
+        'total_demands': len(self.traffic_demands),
+        'satisfaction_rate': satisfied_demands / len(self.traffic_demands) if self.traffic_demands else 0,
+        'avg_latency': avg_latency,
+        'congested_links': congested_links,
+        'total_links': len(self.links),
+        'jains_fairness_index': jains_fairness
+    }
