@@ -641,12 +641,48 @@ def data_generation_page():
         col1, col2 = st.columns(2)
         
         with col1:
+            # User Type Distribution
             type_dist = df['user_type_name'].value_counts()
-            st.bar_chart(type_dist)
+            fig_type = go.Figure(data=[
+                go.Bar(
+                    x=type_dist.index,
+                    y=type_dist.values,
+                    marker_color=['#FF1744', '#2196F3', '#4CAF50'],
+                    text=type_dist.values,
+                    textposition='auto',
+                )
+            ])
+            fig_type.update_layout(
+                title='User Type Distribution',
+                xaxis_title='User Type',
+                yaxis_title='Count',
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig_type, use_container_width=True)
         
         with col2:
-            priority_dist = df['priority'].value_counts().sort_index()
-            st.bar_chart(priority_dist)
+            # Priority Distribution - group by priority ranges
+            priority_bins = pd.cut(df['priority'], bins=[0, 5, 8, 10], labels=['Low (1-5)', 'Medium (6-8)', 'High (9-10)'])
+            priority_grouped = priority_bins.value_counts().sort_index()
+            
+            fig_priority = go.Figure(data=[
+                go.Bar(
+                    x=priority_grouped.index.astype(str),
+                    y=priority_grouped.values,
+                    marker_color=['#4CAF50', '#FF9800', '#F44336'],
+                    text=priority_grouped.values,
+                    textposition='auto',
+                )
+            ])
+            fig_priority.update_layout(
+                title='Priority Distribution',
+                xaxis_title='Priority Level',
+                yaxis_title='Count',
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig_priority, use_container_width=True)
 
         st.markdown("#### Sample User Data")
         st.dataframe(df.head(20), use_container_width=True)
