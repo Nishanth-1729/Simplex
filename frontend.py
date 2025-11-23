@@ -1713,7 +1713,9 @@ def network_topology_page():
             
             # Export options
             st.markdown("---")
-            st.markdown("### Export Network Configuration")
+            st.markdown("###  Export Network Configuration & Link Bandwidth Data")
+            
+            st.info("** Excel Report Includes:** Link Bandwidth Allocation (Source→Destination with allocated bandwidth) | Node Information | Traffic Demands | Performance Metrics | Bottleneck Analysis")
             
             col1, col2, col3 = st.columns(3)
             
@@ -1741,7 +1743,7 @@ def network_topology_page():
                 csv = df_summary.to_csv(index=False)
                 
                 st.download_button(
-                    label="📄 Download Summary (CSV)",
+                    label=" Download Summary (CSV)",
                     data=csv,
                     file_name=f"network_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
@@ -1853,11 +1855,12 @@ def network_topology_page():
                 excel_buffer.seek(0)
                 
                 st.download_button(
-                    label="Download Full Report (Excel)",
+                    label="📊 Download Full Report (Excel)",
                     data=excel_buffer,
                     file_name=f"network_topology_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    use_container_width=True,
+                    help="Includes Link Bandwidth Allocation, Node Info, Traffic Demands, Performance Metrics & More"
                 )
             
             with col3:
