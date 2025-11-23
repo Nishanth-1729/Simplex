@@ -8,6 +8,7 @@ import sys
 import os
 from datetime import datetime
 import time as time_module
+import io
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
@@ -304,6 +305,7 @@ def unified_optimiser_page():
             
             st.session_state['unified_result'] = result
             st.session_state['unified_demands'] = demands
+            st.session_state['optimization_timestamp'] = time_module.time()  # Add timestamp for unique keys
             
             progress_bar.progress(100)
             status_text.text("COMPLETE!")
@@ -315,6 +317,7 @@ def unified_optimiser_page():
     # Display Results
     if 'unified_result' in st.session_state:
         result = st.session_state['unified_result']
+        df = st.session_state.users_df  # Get the dataframe from session state
         
         if result['status'] == 'optimal':
             st.markdown("---")
@@ -383,7 +386,9 @@ def unified_optimiser_page():
             
             fig_gauges.update_layout(height=300)
             
-            st.plotly_chart(fig_gauges, use_container_width=True, key="core_gauges")            # CONVERGENCE VISUALIZATION
+            # Use dynamic key based on optimization timestamp
+            opt_key = st.session_state.get('optimization_timestamp', 0)
+            st.plotly_chart(fig_gauges, use_container_width=True, key=f"core_gauges_{opt_key}")            # CONVERGENCE VISUALIZATION
             st.markdown("### Convergence Analysis")
             
             conv_viz = ConvergenceVisualizer()
@@ -405,7 +410,7 @@ def unified_optimiser_page():
             
             fig_conv = conv_viz.create_objective_convergence_plot(convergence_data)
             
-            st.plotly_chart(fig_conv, use_container_width=True, key="core_convergence")            # Comprehensive metrics
+            st.plotly_chart(fig_conv, use_container_width=True, key=f"core_convergence_{opt_key}")            # Comprehensive metrics
             st.markdown("### Detailed Statistics")
             
             metrics = result['metrics']
@@ -460,23 +465,86 @@ def unified_optimiser_page():
                 height=400
             )
             
-            st.plotly_chart(fig_dist, use_container_width=True, key="core_allocation_dist")
+            st.plotly_chart(fig_dist, use_container_width=True, key=f"core_allocation_dist_{opt_key}")
             
             # Download results
             st.markdown("### Export Results")
             
+            # Get the subset of users that were optimized
+            subset_df = df.head(n_users).copy()
             results_df = subset_df.copy()
             results_df['allocated_mbps'] = allocation
             results_df['satisfaction'] = allocation / demands
             
-            csv = results_df.to_csv(index=False)
-            st.download_button(
-                label="Download Results (CSV)",
-                data=csv,
-                file_name=f"unified_optimization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                csv = results_df.to_csv(index=False)
+                st.download_button(
+                    label="📄 Download Results (CSV)",
+                    data=csv,
+                    file_name=f"unified_optimization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Create Excel file with allocation details
+                excel_buffer = io.BytesIO()
+                
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    # User allocation sheet
+                    results_df.to_excel(writer, sheet_name='User_Allocations', index=False)
+                    
+                    # Summary statistics sheet
+                    summary_data = {
+                        'Metric': [
+                            'Total Users',
+                            'Total Capacity (Mbps)',
+                            'Total Allocated (Mbps)',
+                            'Total Demand (Mbps)',
+                            'Capacity Utilization (%)',
+                            'Average Satisfaction (%)',
+                            'Fairness Index (Jain)',
+                            'Solve Time (seconds)',
+                            'Objective Value'
+                        ],
+                        'Value': [
+                            n_users,
+                            f"{total_capacity:.2f}",
+                            f"{allocation.sum():.2f}",
+                            f"{demands.sum():.2f}",
+                            f"{result['capacity_utilization']*100:.2f}",
+                            f"{metrics['avg_satisfaction']*100:.2f}",
+                            f"{metrics['jains_fairness_index']:.4f}",
+                            f"{result['solve_time']:.4f}",
+                            f"{result['objective_value']:.4f}"
+                        ]
+                    }
+                    summary_df = pd.DataFrame(summary_data)
+                    summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                    
+                    # Tier breakdown sheet
+                    tier_breakdown = results_df.groupby('user_type_name').agg({
+                        'user_id': 'count',
+                        'base_demand_mbps': 'sum',
+                        'allocated_mbps': 'sum',
+                        'satisfaction': 'mean',
+                        'priority': 'mean'
+                    }).reset_index()
+                    tier_breakdown.columns = ['Tier', 'User Count', 'Total Demand (Mbps)', 
+                                             'Total Allocated (Mbps)', 'Avg Satisfaction', 'Avg Priority']
+                    tier_breakdown.to_excel(writer, sheet_name='Tier_Breakdown', index=False)
+                
+                excel_buffer.seek(0)
+                
+                st.download_button(
+                    label="📊 Download Full Report (Excel)",
+                    data=excel_buffer,
+                    file_name=f"unified_optimization_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
         
         else:
             st.error(f"Optimization failed: {result.get('error', 'Unknown error')}")
@@ -1025,6 +1093,7 @@ def network_topology_page():
                     # Store result
                     st.session_state['network_result'] = result
                     st.session_state['network_optimized'] = True
+                    st.session_state['network_optimization_timestamp'] = time_module.time()  # Add timestamp for unique keys
                     
                     progress_bar.progress(100)
                     status_text.text("Optimization complete!")
@@ -1039,6 +1108,9 @@ def network_topology_page():
         optimizer = st.session_state['network_optimizer']
         result = st.session_state['network_result']
         summary = st.session_state['network_summary']
+        
+        # Get timestamp for dynamic chart keys
+        net_key = st.session_state.get('network_optimization_timestamp', 0)
         
         st.markdown("---")
         
@@ -1127,7 +1199,7 @@ def network_topology_page():
                             height=300,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_obj, use_container_width=True, key="conv_objective")
+                        st.plotly_chart(fig_obj, use_container_width=True, key=f"conv_objective_{net_key}")
                         
                         # Constraint violation convergence
                         fig_constraint = go.Figure()
@@ -1149,7 +1221,7 @@ def network_topology_page():
                             height=300,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_constraint, use_container_width=True, key="conv_constraint")
+                        st.plotly_chart(fig_constraint, use_container_width=True, key=f"conv_constraint_{net_key}")
                         
                         # Fairness convergence
                         fig_fairness = go.Figure()
@@ -1171,7 +1243,7 @@ def network_topology_page():
                             height=300,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_fairness, use_container_width=True, key="conv_fairness")
+                        st.plotly_chart(fig_fairness, use_container_width=True, key=f"conv_fairness_{net_key}")
                     
                     with col2:
                         # Efficiency convergence
@@ -1192,7 +1264,7 @@ def network_topology_page():
                             height=300,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_efficiency, use_container_width=True, key="conv_efficiency")
+                        st.plotly_chart(fig_efficiency, use_container_width=True, key=f"conv_efficiency_{net_key}")
                         
                         # Throughput convergence
                         fig_throughput = go.Figure()
@@ -1212,7 +1284,7 @@ def network_topology_page():
                             height=300,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_throughput, use_container_width=True, key="conv_throughput")
+                        st.plotly_chart(fig_throughput, use_container_width=True, key=f"conv_throughput_{net_key}")
                         
                         # Latency convergence
                         fig_latency = go.Figure()
@@ -1232,7 +1304,7 @@ def network_topology_page():
                             height=300,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_latency, use_container_width=True, key="conv_latency")
+                        st.plotly_chart(fig_latency, use_container_width=True, key=f"conv_latency_{net_key}")
                     
                     st.markdown("---")
                 
@@ -1261,7 +1333,7 @@ def network_topology_page():
                         showlegend=False
                     )
                     
-                    st.plotly_chart(fig_throughput, use_container_width=True, key="opt_throughput")
+                    st.plotly_chart(fig_throughput, use_container_width=True, key=f"opt_throughput_{net_key}")
                     
                     efficiency = (total_allocated / total_capacity * 100) if total_capacity > 0 else 0
                     satisfaction = (total_allocated / total_demand * 100) if total_demand > 0 else 0
@@ -1296,7 +1368,7 @@ def network_topology_page():
                     fig_util_dist.add_vline(x=80, line_dash="dash", line_color="red", 
                                            annotation_text="80% threshold")
                     
-                    st.plotly_chart(fig_util_dist, use_container_width=True, key="opt_util_dist")
+                    st.plotly_chart(fig_util_dist, use_container_width=True, key=f"opt_util_dist_{net_key}")
                     
                     balanced_links = sum(1 for u in utilizations if 30 <= u <= 80)
                     st.success(f"**Load Balancing:** {balanced_links}/{len(utilizations)} links in optimal range (30-80%)")
@@ -1348,7 +1420,7 @@ def network_topology_page():
                             }
                         ))
                         fig_qos.update_layout(height=250)
-                        st.plotly_chart(fig_qos, use_container_width=True, key=f"qos_{qos_val}")
+                        st.plotly_chart(fig_qos, use_container_width=True, key=f"qos_{qos_val}_{net_key}")
                         
                         st.metric(f"Users", stats['count'])
                         st.metric(f"Satisfaction", f"{satisfaction:.1f}%")
@@ -1377,7 +1449,7 @@ def network_topology_page():
                         showlegend=False
                     )
                     
-                    st.plotly_chart(fig_latency, use_container_width=True, key="opt_latency")
+                    st.plotly_chart(fig_latency, use_container_width=True, key=f"opt_latency_{net_key}")
                     
                     avg_latency = sum(latencies) / len(latencies) if latencies else 0
                     max_latency = max(latencies) if latencies else 0
@@ -1429,7 +1501,7 @@ def network_topology_page():
                         fig_achievement.add_hline(y=90, line_dash="dash", line_color="green",
                                                  annotation_text="90% target")
                         
-                        st.plotly_chart(fig_achievement, use_container_width=True, key="opt_achievement")
+                        st.plotly_chart(fig_achievement, use_container_width=True, key=f"opt_achievement_{net_key}")
                         
                         overall_achievement = sum(achievement_scores) / len(achievement_scores) if achievement_scores else 0
                         st.success(f"**Overall Achievement:** {overall_achievement:.1f}%")
@@ -1445,7 +1517,7 @@ def network_topology_page():
                     show_flows=True,
                     highlight_bottlenecks=True
                 )
-                st.plotly_chart(fig_3d, use_container_width=True, key="network_3d_results")
+                st.plotly_chart(fig_3d, use_container_width=True, key=f"network_3d_results_{net_key}")
             
             with tab3:
                 st.markdown("###2D Network Graph")
@@ -1453,7 +1525,7 @@ def network_topology_page():
                 
                 # Create 2D visualization
                 fig_2d = viz.create_network_topology_2d(optimizer, show_flows=True)
-                st.plotly_chart(fig_2d, use_container_width=True, key="network_2d_map")
+                st.plotly_chart(fig_2d, use_container_width=True, key=f"network_2d_map_{net_key}")
                 
                 # Bandwidth allocation legend
                 st.markdown("#### Edge Color Legend:")
@@ -1471,7 +1543,7 @@ def network_topology_page():
                 st.markdown("###  Network Congestion Heat Map")
                 
                 fig_heatmap = viz.create_congestion_heatmap(optimizer)
-                st.plotly_chart(fig_heatmap, use_container_width=True, key="network_congestion_heatmap")
+                st.plotly_chart(fig_heatmap, use_container_width=True, key=f"network_congestion_heatmap_{net_key}")
                 
                 # Bottleneck detection
                 st.markdown("####  Bottleneck Detection")
@@ -1496,7 +1568,7 @@ def network_topology_page():
                 st.markdown("###  Comprehensive Performance Dashboard")
                 
                 fig_dashboard = viz.create_metrics_dashboard(optimizer, result)
-                st.plotly_chart(fig_dashboard, use_container_width=True, key="network_metrics_dashboard")
+                st.plotly_chart(fig_dashboard, use_container_width=True, key=f"network_metrics_dashboard_{net_key}")
             
             with tab6:
                 st.markdown("### Network Reliability & Critical Node Analysis")
@@ -1544,7 +1616,7 @@ def network_topology_page():
                         }
                     ))
                     fig_rel.update_layout(height=300)
-                    st.plotly_chart(fig_rel, use_container_width=True, key="network_reliability_gauge")
+                    st.plotly_chart(fig_rel, use_container_width=True, key=f"network_reliability_gauge_{net_key}")
                     
                     if reliability >= 0.99:
                         st.success("Excellent network reliability!")
@@ -1610,34 +1682,169 @@ def network_topology_page():
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("Download Network Summary (CSV)", use_container_width=True):
-                    # Create summary CSV
-                    summary_data = {
+                # CSV Summary Export
+                summary_data = {
+                    'Metric': [
+                        'Total Nodes', 'Total Links', 'Total Demands',
+                        'Avg Utilization', 'Max Utilization', 'Satisfaction Rate',
+                        'Avg Latency', 'Network Reliability', 'Critical Nodes'
+                    ],
+                    'Value': [
+                        summary['nodes']['total'],
+                        summary['links']['total'],
+                        len(optimizer.traffic_demands),
+                        f"{metrics['avg_link_utilization']:.2%}",
+                        f"{metrics['max_link_utilization']:.2%}",
+                        f"{metrics['satisfaction_rate']:.2%}",
+                        f"{metrics['avg_latency']:.2f} ms",
+                        f"{optimizer.calculate_network_reliability():.2%}",
+                        len(optimizer.find_single_points_of_failure())
+                    ]
+                }
+                df_summary = pd.DataFrame(summary_data)
+                csv = df_summary.to_csv(index=False)
+                
+                st.download_button(
+                    label="📄 Download Summary (CSV)",
+                    data=csv,
+                    file_name=f"network_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Excel Report with Link Bandwidth Details
+                excel_buffer = io.BytesIO()
+                
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    # 1. Network Summary
+                    df_summary.to_excel(writer, sheet_name='Network_Summary', index=False)
+                    
+                    # 2. Link Bandwidth Allocation
+                    link_data = []
+                    for (src, dst), link in optimizer.links.items():
+                        utilization = (link.current_load / link.capacity * 100) if link.capacity > 0 else 0
+                        link_data.append({
+                            'Source': src,
+                            'Destination': dst,
+                            'Capacity (Mbps)': f"{link.capacity:.2f}",
+                            'Allocated Bandwidth (Mbps)': f"{link.current_load:.2f}",
+                            'Available Bandwidth (Mbps)': f"{link.capacity - link.current_load:.2f}",
+                            'Utilization (%)': f"{utilization:.2f}",
+                            'Latency (ms)': f"{link.latency:.2f}",
+                            'Status': 'Critical' if utilization > 90 else 'High' if utilization > 70 else 'Normal'
+                        })
+                    
+                    link_df = pd.DataFrame(link_data)
+                    link_df.to_excel(writer, sheet_name='Link_Bandwidth_Allocation', index=False)
+                    
+                    # 3. Node Information
+                    node_data = []
+                    for node_id, node in optimizer.nodes.items():
+                        qos_name = node.qos_class.name if node.qos_class else 'N/A'
+                        node_data.append({
+                            'Node ID': node_id,
+                            'Type': node.type.value,
+                            'Capacity (Mbps)': f"{node.capacity:.2f}",
+                            'Processing Delay (ms)': f"{node.processing_delay:.2f}",
+                            'QoS Class': qos_name,
+                            'Reliability': f"{(1-node.failure_probability)*100:.2f}%"
+                        })
+                    
+                    node_df = pd.DataFrame(node_data)
+                    node_df.to_excel(writer, sheet_name='Node_Information', index=False)
+                    
+                    # 4. Traffic Demands
+                    demand_data = []
+                    for demand in optimizer.traffic_demands:
+                        qos_names = {1: 'Emergency', 2: 'Premium', 3: 'Standard'}
+                        demand_data.append({
+                            'Demand ID': demand.id,
+                            'Source': demand.source,
+                            'Destination': demand.destination,
+                            'Demand (Mbps)': f"{demand.demand:.2f}",
+                            'QoS Class': qos_names.get(demand.qos_class.value, 'Unknown'),
+                            'Max Latency (ms)': f"{demand.max_latency:.2f}",
+                            'Min Reliability': f"{demand.min_reliability*100:.2f}%"
+                        })
+                    
+                    demand_df = pd.DataFrame(demand_data)
+                    demand_df.to_excel(writer, sheet_name='Traffic_Demands', index=False)
+                    
+                    # 5. Performance Metrics
+                    perf_data = {
                         'Metric': [
-                            'Total Nodes', 'Total Links', 'Total Demands',
-                            'Avg Utilization', 'Max Utilization', 'Satisfaction Rate',
-                            'Avg Latency', 'Network Reliability', 'Critical Nodes'
+                            'Average Link Utilization',
+                            'Maximum Link Utilization',
+                            'Congested Links',
+                            'Total Links',
+                            'Demands Satisfied',
+                            'Total Demands',
+                            'Satisfaction Rate',
+                            'Average Latency',
+                            'Network Reliability',
+                            'Jain\'s Fairness Index'
                         ],
                         'Value': [
-                            summary['nodes']['total'],
-                            summary['links']['total'],
-                            len(optimizer.traffic_demands),
                             f"{metrics['avg_link_utilization']:.2%}",
                             f"{metrics['max_link_utilization']:.2%}",
+                            f"{metrics['congested_links']}",
+                            f"{metrics['total_links']}",
+                            f"{metrics['demands_satisfied']}",
+                            f"{metrics['total_demands']}",
                             f"{metrics['satisfaction_rate']:.2%}",
                             f"{metrics['avg_latency']:.2f} ms",
                             f"{optimizer.calculate_network_reliability():.2%}",
-                            len(optimizer.find_single_points_of_failure())
+                            f"{metrics.get('jains_fairness_index', 0):.4f}"
                         ]
                     }
-                    df_summary = pd.DataFrame(summary_data)
-                    csv = df_summary.to_csv(index=False)
+                    perf_df = pd.DataFrame(perf_data)
+                    perf_df.to_excel(writer, sheet_name='Performance_Metrics', index=False)
+                    
+                    # 6. Bottleneck Analysis
+                    bottlenecks = optimizer.detect_bottlenecks(threshold=0.7)
+                    if bottlenecks:
+                        bottleneck_data = []
+                        for src, dst, util in bottlenecks:
+                            bottleneck_data.append({
+                                'Link': f"{src} → {dst}",
+                                'Utilization (%)': f"{util*100:.2f}",
+                                'Severity': 'Critical' if util > 0.9 else 'High'
+                            })
+                        bottleneck_df = pd.DataFrame(bottleneck_data)
+                        bottleneck_df.to_excel(writer, sheet_name='Bottleneck_Analysis', index=False)
+                
+                excel_buffer.seek(0)
+                
+                st.download_button(
+                    label="Download Full Report (Excel)",
+                    data=excel_buffer,
+                    file_name=f"network_topology_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+            with col3:
+                # Export network flows data
+                if optimizer.flows:
+                    flow_data = []
+                    for (demand_id, src, dst), flow_value in optimizer.flows.items():
+                        if flow_value > 0.01:  # Only include significant flows
+                            flow_data.append({
+                                'Demand ID': demand_id,
+                                'Link': f"{src} → {dst}",
+                                'Flow (Mbps)': f"{flow_value:.2f}"
+                            })
+                    
+                    flow_df = pd.DataFrame(flow_data)
+                    csv_flows = flow_df.to_csv(index=False)
                     
                     st.download_button(
-                        label="Download CSV",
-                        data=csv,
-                        file_name=f"network_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
+                        label=" Download Flow Data (CSV)",
+                        data=csv_flows,
+                        file_name=f"network_flows_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
                     )
         
         else:
