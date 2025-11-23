@@ -11,7 +11,7 @@ import time as time_module
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
-from backend.unified_optimizer import UnifiedOptimizer, ConvergenceTracker
+from backend.unified_optimiser import UnifiedOptimizer, ConvergenceTracker
 from backend.convergence_visualizer import ConvergenceVisualizer
 from backend.data_generator import DataGenerator
 from backend.visualizer import BandwidthVisualizer
@@ -152,13 +152,13 @@ def main():
     if page == "Data Generation":
         data_generation_page()
     elif page == "UNIFIED OPTIMIZER":
-        unified_optimizer_page()
+        unified_optimiser_page()
     elif page == "NETWORK TOPOLOGY":
         network_topology_page()
     elif page == "Guide":
         user_guide_page()
 
-def unified_optimizer_page():
+def unified_optimiser_page():
     """THE UNIFIED OPTIMIZER PAGE"""
     st.markdown('<p class="sub-header">UNIFIED BANDWIDTH OPTIMIZER</p>', unsafe_allow_html=True)
     
