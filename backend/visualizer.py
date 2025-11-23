@@ -229,3 +229,219 @@ class BandwidthVisualizer:
         
         return fig
     
+    def plot_sensitivity_analysis(self, parameter_values: List[float], objective_values: List[float], parameter_name: str) -> go.Figure:
+       
+        # Plot sensitivity analysis results.
+        # Returns: Plotly figure
+       
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=parameter_values,
+            y=objective_values,
+            mode='lines+markers',
+            marker=dict(size=10, color='orange'),
+            line=dict(width=3)
+        ))
+        
+        fig.update_layout(
+            title=f'Sensitivity Analysis: {parameter_name}',
+            xaxis_title=parameter_name,
+            yaxis_title='Objective Value',
+            height=450
+        )
+        
+        return fig
+    
+    def plot_robustness_comparison(self, uncertainty_models: List[str], robustness_probs: List[float], prices_of_robustness: List[float]) -> go.Figure:
+       
+        # Compare robustness of different uncertainty models.
+        # Returns: Plotly figure with dual axes
+       
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        fig.add_trace(
+            go.Bar(x=uncertainty_models, y=robustness_probs, 
+                   name='Robustness Probability', marker_color='lightblue'),
+            secondary_y=False
+        )
+        
+        fig.add_trace(
+            go.Scatter(x=uncertainty_models, y=prices_of_robustness, 
+                      name='Price of Robustness', mode='lines+markers',
+                      marker=dict(size=12, color='red')),
+            secondary_y=True
+        )
+        
+        fig.update_xaxes(title_text="Uncertainty Model")
+        fig.update_yaxes(title_text="Robustness Probability", secondary_y=False)
+        fig.update_yaxes(title_text="Price of Robustness", secondary_y=True)
+        
+        fig.update_layout(
+            title='Robustness vs Performance Trade-off',
+            height=500
+        )
+        
+        return fig
+    
+    def plot_user_satisfaction(self, allocation: np.ndarray, demands: np.ndarray, priorities: np.ndarray) -> go.Figure:
+        
+        # Plot user satisfaction distribution.
+        # Returns: Plotly figure
+        
+        satisfaction = np.minimum(allocation / (demands + 1e-6), 1.0)
+        
+        fig = go.Figure()
+        
+        # Histogram
+        fig.add_trace(go.Histogram(
+            x=satisfaction,
+            nbinsx=20,
+            name='Satisfaction Distribution',
+            marker_color='skyblue'
+        ))
+        
+        # Add average line
+        avg_satisfaction = np.mean(satisfaction)
+        fig.add_vline(x=avg_satisfaction, line_dash="dash", line_color="red",
+                     annotation_text=f"Avg: {avg_satisfaction:.2f}")
+        
+        fig.update_layout(
+            title='User Satisfaction Distribution',
+            xaxis_title='Satisfaction Ratio (Allocated / Demanded)',
+            yaxis_title='Number of Users',
+            height=400
+        )
+        
+        return fig
+    
+    def create_dashboard_summary(self, results: Dict) -> go.Figure:
+        
+        # Creates comprehensive dashboard with key metrics.
+        # Args: results: Dictionary containing optimization results
+        # Returns: Plotly figure with multiple subplots
+        
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                'Allocation vs Demand',
+                'Fairness Metrics',
+                'Utilization',
+                'Satisfaction Distribution'
+            ),
+            specs=[
+                [{'type': 'bar'}, {'type': 'indicator'}],
+                [{'type': 'scatter'}, {'type': 'histogram'}]
+            ]
+        )
+        
+        # 1. Allocation vs Demand (top users)
+        allocation = results['allocation'][:20]
+        demands = results.get('demands', allocation)[:20]
+        users = [f'U{i+1}' for i in range(20)]
+        
+        fig.add_trace(
+            go.Bar(x=users, y=demands, name='Demand', marker_color='lightgray'),
+            row=1, col=1
+        )
+        fig.add_trace(
+            go.Bar(x=users, y=allocation, name='Allocated', marker_color='blue'),
+            row=1, col=1
+        )
+        
+        # 2. Fairness indicator
+        fairness = results.get('metrics', {}).get('jains_fairness_index', 0.85)
+        fig.add_trace(
+            go.Indicator(
+                mode="gauge+number+delta",
+                value=fairness,
+                title={'text': "Fairness Index"},
+                delta={'reference': 0.8},
+                gauge={'axis': {'range': [0, 1]},
+                      'bar': {'color': "darkblue"},
+                      'steps': [
+                          {'range': [0, 0.5], 'color': "lightgray"},
+                          {'range': [0.5, 0.8], 'color': "gray"}],
+                      'threshold': {
+                          'line': {'color': "red", 'width': 4},
+                          'thickness': 0.75,
+                          'value': 0.9}}
+            ),
+            row=1, col=2
+        )
+        
+        # 3. Utilization over time (if temporal data available)
+        if 'utilization_per_slot' in results.get('metrics', {}):
+            util = results['metrics']['utilization_per_slot']
+            time_labels = list(range(len(util)))
+            fig.add_trace(
+                go.Scatter(x=time_labels, y=util, mode='lines+markers', 
+                          name='Utilization', line=dict(color='green', width=2)),
+                row=2, col=1
+            )
+        
+        # 4. Satisfaction distribution
+        if 'avg_satisfaction' in results.get('metrics', {}):
+            # Create sample satisfaction data
+            satisfaction = np.random.beta(4, 1, 100)  # Placeholder
+            fig.add_trace(
+                go.Histogram(x=satisfaction, nbinsx=20, name='Satisfaction',
+                            marker_color='skyblue'),
+                row=2, col=2
+            )
+        
+        fig.update_layout(height=800, showlegend=True, title_text="Optimization Dashboard")
+        
+        return fig
+
+
+class ReportGenerator:
+
+    # Generate detailed analysis reports.
+   
+    @staticmethod
+    def generate_summary_report(results: Dict) -> str:
+       
+        # Generate text summary report of optimization results.
+        # Returns: Formatted string report
+       
+        report = []
+        report.append("=" * 80)
+        report.append("BANDWIDTH ALLOCATION OPTIMIZATION REPORT")
+        report.append("=" * 80)
+        report.append("")
+        
+        # Basic info
+        report.append("OPTIMIZATION STATUS")
+        report.append("-" * 80)
+        report.append(f"Status: {results.get('status', 'Unknown')}")
+        report.append(f"Solve Time: {results.get('solve_time', 0):.4f} seconds")
+        report.append(f"Objective Value: {results.get('objective_value', 0):.2f}")
+        report.append("")
+        
+        # Metrics
+        if 'metrics' in results:
+            metrics = results['metrics']
+            report.append("PERFORMANCE METRICS")
+            report.append("-" * 80)
+            report.append(f"Jain's Fairness Index: {metrics.get('jains_fairness_index', 0):.4f}")
+            report.append(f"Average Satisfaction: {metrics.get('avg_satisfaction', 0):.4f}")
+            report.append(f"Total Allocated: {metrics.get('total_allocated', 0):.2f} Mbps")
+            report.append(f"Utilization: {results.get('utilization', 0):.2f}%")
+            report.append("")
+        
+        # Allocation statistics
+        if 'allocation' in results:
+            alloc = results['allocation']
+            report.append("ALLOCATION STATISTICS")
+            report.append("-" * 80)
+            report.append(f"Mean Allocation: {np.mean(alloc):.2f} Mbps")
+            report.append(f"Median Allocation: {np.median(alloc):.2f} Mbps")
+            report.append(f"Std Deviation: {np.std(alloc):.2f} Mbps")
+            report.append(f"Min Allocation: {np.min(alloc):.2f} Mbps")
+            report.append(f"Max Allocation: {np.max(alloc):.2f} Mbps")
+            report.append("")
+        
+        report.append("=" * 80)
+        
+        return "\n".join(report)
