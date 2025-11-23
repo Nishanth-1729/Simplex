@@ -268,6 +268,6 @@ The application includes interactive visualizations:
 4. **Flow Heatmaps**: Link utilization and traffic patterns
 5. **Performance Gauges**: Real-time metrics display
 
-## 📄 License
+## License
 
 MIT License - see LICENSE file for details
