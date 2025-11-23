@@ -26,7 +26,7 @@ class NetworkVisualizer:
             'standard': '#4CAF50',   # Green
             'router1': '#FF9800',    # Orange
             'router2': '#9C27B0',    # Purple
-            'source': '#FFC107'      # Amber
+            'source':'#FFC107'      # Amber
         }
     
     def create_network_topology_3d(self, optimizer, show_flows: bool = True,

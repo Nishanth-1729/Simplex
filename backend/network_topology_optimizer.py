@@ -1,20 +1,3 @@
-"""
- ADVANCED NETWORK TOPOLOGY OPTIMIZER 
-Multi-Layer Hierarchical Network Optimization with Intelligent Routing
-
-Architecture: Source → Routers → Users
-Features:
-- Graph-based network modeling (NetworkX)
-- Multi-commodity flow optimization
-- Advanced routing algorithms (Dijkstra, A*, OSPF-inspired)
-- Dynamic load balancing
-- Congestion detection and mitigation
-- QoS-aware path selection
-- Failover and redundancy handling
-- Network capacity planning
-
-This is PRODUCTION-GRADE network optimization! 
-"""
 
 import numpy as np
 import networkx as nx
@@ -78,10 +61,7 @@ class TrafficDemand:
 
 
 class NetworkTopologyOptimizer:
-    """
-    ULTIMATE Network Topology Optimizer
-    Combines graph theory, optimization, and advanced routing algorithms
-    """
+    
     
     def __init__(self, enable_redundancy: bool = True, enable_load_balancing: bool = True):
         """
@@ -142,15 +122,6 @@ class NetworkTopologyOptimizer:
                                    router1_capacity: float = 30000.0,
                                    router2_capacity: float = 10000.0,
                                    link_capacity_multiplier: float = 1.2):
-        """
-        Build a hierarchical network: Source → Router Layer 1 → Router Layer 2 → Users
-        
-        This creates a realistic ISP-like topology with:
-        - 1 Source (backbone connection)
-        - Layer 1 routers (core routers)
-        - Layer 2 routers (edge routers)  
-        - End users
-        """
         print(f" Building hierarchical network...")
         print(f"   Source: 1, L1 Routers: {n_routers_layer1}, L2 Routers: {n_routers_layer2}, Users: {n_users}")
         
@@ -280,15 +251,6 @@ class NetworkTopologyOptimizer:
     
     def generate_traffic_demands(self, user_ids: List[str], total_traffic_gbps: float = 50.0,
                                 emergency_pct: float = 0.05, premium_pct: float = 0.20):
-        """
-        Generate realistic traffic demands for users with custom QoS distribution
-        
-        Args:
-            user_ids: List of user node IDs
-            total_traffic_gbps: Total traffic in Gbps to distribute
-            emergency_pct: Percentage of emergency users (0-1)
-            premium_pct: Percentage of premium users (0-1)
-        """
         print(f" Generating traffic demands for {len(user_ids)} users...")
         print(f"   QoS Distribution: {emergency_pct*100:.0f}% Emergency, {premium_pct*100:.0f}% Premium, {(1-emergency_pct-premium_pct)*100:.0f}% Standard")
         
@@ -345,11 +307,7 @@ class NetworkTopologyOptimizer:
         print(f" Generated {len(self.traffic_demands)} demands, Total: {total_demand:.0f} Mbps")
     
     def compute_k_shortest_paths(self, source: str, target: str, k: int = 3) -> List[List[str]]:
-        """
-        Compute k shortest paths using Yen's algorithm
         
-        Returns list of paths, where each path is a list of node IDs
-        """
         if source not in self.graph or target not in self.graph:
             return []
         
@@ -363,12 +321,7 @@ class NetworkTopologyOptimizer:
             return []
     
     def compute_path_metrics(self, path: List[str]) -> Dict[str, float]:
-        """
-        Calculate metrics for a given path
         
-        Returns:
-            Dictionary with latency, capacity, cost, reliability
-        """
         if len(path) < 2:
             return {'latency': float('inf'), 'capacity': 0, 'cost': float('inf'), 'reliability': 0}
         
@@ -401,15 +354,7 @@ class NetworkTopologyOptimizer:
         }
     
     def optimize_flows_multi_commodity(self, verbose: bool = True) -> Dict:
-        """
-        Solve multi-commodity flow problem using CVXPY
         
-        This is the CORE optimization that routes all traffic demands through the network
-        while respecting capacity constraints and QoS requirements.
-        
-        Returns:
-            Dictionary with optimization results
-        """
         start_time = time.time()
         
         if verbose:
@@ -639,12 +584,7 @@ class NetworkTopologyOptimizer:
         }
     
     def detect_bottlenecks(self, threshold: float = 0.8) -> List[Tuple[str, str, float]]:
-        """
-        Detect network bottlenecks (highly utilized links)
         
-        Returns:
-            List of (source, target, utilization) tuples
-        """
         bottlenecks = []
         
         for edge, link in self.links.items():
@@ -656,12 +596,7 @@ class NetworkTopologyOptimizer:
         return sorted(bottlenecks, key=lambda x: x[2], reverse=True)
     
     def find_single_points_of_failure(self) -> List[str]:
-        """
-        Identify nodes whose failure would disconnect the network
         
-        Returns:
-            List of critical node IDs
-        """
         critical_nodes = []
         
         # Check each node
@@ -687,12 +622,7 @@ class NetworkTopologyOptimizer:
         return critical_nodes
     
     def calculate_network_reliability(self) -> float:
-        """
-        Calculate overall network reliability using path reliability
         
-        Returns:
-            Network reliability score [0, 1]
-        """
         if not self.paths:
             return 0.0
         
@@ -709,10 +639,7 @@ class NetworkTopologyOptimizer:
     
     def _generate_convergence_data(self, final_objective: float, solve_time: float, 
                                    final_metrics: Dict) -> Dict:
-        """
-        Generate realistic convergence data showing optimization progress
-        Simulates how the optimizer converges to optimal solution
-        """
+        
         # Estimate number of iterations based on solve time and problem size
         n_iterations = max(10, min(100, int(solve_time * 50 + len(self.traffic_demands) / 2)))
         
@@ -788,7 +715,6 @@ class NetworkTopologyOptimizer:
         }
     
     def get_network_summary(self) -> Dict:
-        """Get comprehensive network summary"""
         
         # Node counts by type
         node_counts = defaultdict(int)
@@ -830,7 +756,6 @@ class NetworkTopologyOptimizer:
 
 
 def demo_network_optimizer():
-    """Demonstration of the network topology optimizer"""
     print("" + "="*78)
     print("   ADVANCED NETWORK TOPOLOGY OPTIMIZER - DEMO")
     print("="*80 + "\n")
