@@ -175,9 +175,6 @@ def unified_optimiser_page():
     n_users = len(df)
     total_capacity = float(df['base_demand_mbps'].sum() * 0.75)
     
-    # Display dataset info
-    st.info(f"📊 Using entire dataset: **{n_users:,} users** | Total Capacity: **{total_capacity:,.0f} Mbps** (75% of total demand)")
-    
     # Utility Function Configuration
     col1, col2 = st.columns(2)
     
@@ -342,49 +339,56 @@ def unified_optimiser_page():
             # Use dynamic key based on optimization timestamp
             opt_key = st.session_state.get('optimization_timestamp', 0)
             
-            # SATISFACTION BY PRIORITY ANALYSIS
-            st.markdown("### Satisfaction Rate by Priority Level")
+            # SATISFACTION HEATMAP ANALYSIS
+            st.markdown("### Satisfaction Heatmap: Priority vs Demand Range")
             
             # Calculate satisfaction rate for each user
             allocation = result['allocation']
             satisfaction = allocation / demands
-            satisfaction = np.clip(satisfaction, 0, 1)  # Cap at 100%
+            satisfaction = np.clip(satisfaction, 0, 1) * 100  # Convert to percentage
             
-            # Create box plot for each priority level
-            fig_priority = go.Figure()
+            # Create demand bins
+            demand_bins = [0, 20, 40, 60, 80, 100, 200]
+            demand_labels = ['0-20', '20-40', '40-60', '60-80', '80-100', '100+']
+            demand_categories = pd.cut(demands, bins=demand_bins, labels=demand_labels, include_lowest=True)
             
-            # Get unique priority levels and sort them
-            unique_priorities = sorted(np.unique(priorities))
-            colors = ['#d62728', '#ff7f0e', '#2ca02c']  # Red (Low), Orange (Mid), Green (High)
+            # Round priorities to nearest integer for grouping
+            priority_rounded = np.round(priorities).astype(int)
             
-            for idx, priority in enumerate(unique_priorities):
-                mask = priorities == priority
-                priority_satisfaction = satisfaction[mask] * 100  # Convert to percentage
-                
-                fig_priority.add_trace(go.Box(
-                    y=priority_satisfaction,
-                    name=f'Priority {int(priority)}',
-                    marker_color=colors[idx] if idx < len(colors) else '#1f77b4',
-                    boxmean='sd'  # Show mean and standard deviation
-                ))
+            # Create DataFrame for grouping
+            heatmap_df = pd.DataFrame({
+                'priority': priority_rounded,
+                'demand_range': demand_categories,
+                'satisfaction': satisfaction
+            })
             
-            # Add 100% satisfaction reference line
-            fig_priority.add_hline(y=100, line_dash="dash", line_color="green", 
-                                  annotation_text="100% Satisfaction", annotation_position="right")
+            # Calculate average satisfaction for each priority-demand combination
+            heatmap_pivot = heatmap_df.groupby(['priority', 'demand_range'])['satisfaction'].mean().unstack(fill_value=0)
             
-            fig_priority.update_layout(
-                title='<b>📊 Satisfaction Distribution by Priority Level</b>',
-                yaxis_title='<b>Satisfaction Rate (%)</b>',
-                xaxis_title='<b>Priority Level</b>',
+            # Create heatmap
+            fig_heatmap = go.Figure(data=go.Heatmap(
+                z=heatmap_pivot.values,
+                x=heatmap_pivot.columns,
+                y=heatmap_pivot.index,
+                colorscale='RdYlGn',  # Red (low) -> Yellow (mid) -> Green (high)
+                text=np.round(heatmap_pivot.values, 1),
+                texttemplate='%{text}%',
+                textfont={"size": 11},
+                colorbar=dict(title="Satisfaction<br>(%)", ticksuffix="%"),
+                hovertemplate='Priority: %{y}<br>Demand: %{x} Mbps<br>Avg Satisfaction: %{z:.1f}%<extra></extra>'
+            ))
+            
+            fig_heatmap.update_layout(
+                title='<b>🔥 Satisfaction Heatmap by Priority and Demand Range</b>',
+                xaxis_title='<b>Demand Range (Mbps)</b>',
+                yaxis_title='<b>Priority Level</b>',
                 height=500,
-                showlegend=False,
-                hovermode='closest',
-                plot_bgcolor='rgba(240,240,240,0.5)'
+                plot_bgcolor='white',
+                xaxis=dict(side='bottom'),
+                yaxis=dict(autorange='reversed')  # Higher priority at top
             )
             
-            fig_priority.update_yaxes(range=[0, 110], showgrid=True, gridwidth=1, gridcolor='LightGray')
-            
-            st.plotly_chart(fig_priority, use_container_width=True, key=f"priority_satisfaction_{opt_key}")
+            st.plotly_chart(fig_heatmap, use_container_width=True, key=f"satisfaction_heatmap_{opt_key}")
             
             # Comprehensive metrics
             st.markdown("### Detailed Statistics")
@@ -1194,149 +1198,170 @@ def network_topology_page():
             viz = NetworkVisualizer()
             
             with tab1:
-                st.markdown("### Optimization Achievement Analysis")
-                st.info("**Visual proof that optimization objectives are being achieved**")
+                st.markdown("### Network Performance Analysis")
+                st.info("**Real-time metrics from actual optimization results**")
                 
-                # Convergence Analysis Section
-                if 'convergence' in result:
-                    st.markdown("## Convergence Analysis - Optimization Progress")
-                    st.success(f"**Converged in {result['convergence']['n_iterations']} iterations** (converged at iteration {result['convergence']['converged_at']})")
-                    
-                    conv = result['convergence']
-                    
-                    # Create 2x3 grid of convergence plots
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        # Objective function convergence
-                        fig_obj = go.Figure()
-                        fig_obj.add_trace(go.Scatter(
-                            x=conv['iterations'],
-                            y=conv['objective'],
-                            mode='lines',
-                            line=dict(color='#FF6B6B', width=2),
-                            fill='tozeroy',
-                            fillcolor='rgba(255, 107, 107, 0.2)',
-                            name='Objective Value'
-                        ))
-                        fig_obj.add_vline(x=conv['converged_at'], line_dash="dash", 
-                                         line_color="green", annotation_text="Converged")
-                        fig_obj.update_layout(
-                            title="Objective Function Convergence",
-                            xaxis_title="Iteration",
-                            yaxis_title="Objective Value",
-                            height=300,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_obj, use_container_width=True, key=f"conv_objective_{net_key}")
-                        
-                        # Constraint violation convergence
-                        fig_constraint = go.Figure()
-                        fig_constraint.add_trace(go.Scatter(
-                            x=conv['iterations'],
-                            y=conv['constraint_violation'],
-                            mode='lines',
-                            line=dict(color='#E74C3C', width=2),
-                            fill='tozeroy',
-                            fillcolor='rgba(231, 76, 60, 0.2)',
-                            name='Constraint Violation'
-                        ))
-                        fig_constraint.add_hline(y=1, line_dash="dash", line_color="orange",
-                                                annotation_text="Target: <1")
-                        fig_constraint.update_layout(
-                            title="Constraint Violation Reduction",
-                            xaxis_title="Iteration",
-                            yaxis_title="Violation",
-                            height=300,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_constraint, use_container_width=True, key=f"conv_constraint_{net_key}")
-                        
-                        # Fairness convergence
-                        fig_fairness = go.Figure()
-                        fig_fairness.add_trace(go.Scatter(
-                            x=conv['iterations'],
-                            y=conv['fairness'],
-                            mode='lines',
-                            line=dict(color='#9B59B6', width=2),
-                            fill='tozeroy',
-                            fillcolor='rgba(155, 89, 182, 0.2)',
-                            name='Fairness Index'
-                        ))
-                        fig_fairness.add_hline(y=0.9, line_dash="dash", line_color="green",
-                                              annotation_text="Excellent: >0.9")
-                        fig_fairness.update_layout(
-                            title="Fairness Index Improvement",
-                            xaxis_title="Iteration",
-                            yaxis_title="Jain's Fairness Index",
-                            height=300,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_fairness, use_container_width=True, key=f"conv_fairness_{net_key}")
-                    
-                    with col2:
-                        # Efficiency convergence
-                        fig_efficiency = go.Figure()
-                        fig_efficiency.add_trace(go.Scatter(
-                            x=conv['iterations'],
-                            y=conv['efficiency'],
-                            mode='lines',
-                            line=dict(color='#3498DB', width=2),
-                            fill='tozeroy',
-                            fillcolor='rgba(52, 152, 219, 0.2)',
-                            name='Network Efficiency'
-                        ))
-                        fig_efficiency.update_layout(
-                            title=" Network Efficiency Growth",
-                            xaxis_title="Iteration",
-                            yaxis_title="Utilization",
-                            height=300,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_efficiency, use_container_width=True, key=f"conv_efficiency_{net_key}")
-                        
-                        # Throughput convergence
-                        fig_throughput = go.Figure()
-                        fig_throughput.add_trace(go.Scatter(
-                            x=conv['iterations'],
-                            y=conv['throughput'],
-                            mode='lines',
-                            line=dict(color='#2ECC71', width=2),
-                            fill='tozeroy',
-                            fillcolor='rgba(46, 204, 113, 0.2)',
-                            name='Total Throughput'
-                        ))
-                        fig_throughput.update_layout(
-                            title="Total Throughput Growth",
-                            xaxis_title="Iteration",
-                            yaxis_title="Throughput (Mbps)",
-                            height=300,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_throughput, use_container_width=True, key=f"conv_throughput_{net_key}")
-                        
-                        # Latency convergence
-                        fig_latency = go.Figure()
-                        fig_latency.add_trace(go.Scatter(
-                            x=conv['iterations'],
-                            y=conv['latency'],
-                            mode='lines',
-                            line=dict(color='#F39C12', width=2),
-                            fill='tozeroy',
-                            fillcolor='rgba(243, 156, 18, 0.2)',
-                            name='Avg Latency'
-                        ))
-                        fig_latency.update_layout(
-                            title=" Average Latency Reduction",
-                            xaxis_title="Iteration",
-                            yaxis_title="Latency (ms)",
-                            height=300,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_latency, use_container_width=True, key=f"conv_latency_{net_key}")
-                    
-                    st.markdown("---")
+                # First row: 2 new graphs showing optimization effectiveness
+                col1, col2 = st.columns(2)
                 
+                with col1:
+                    # GRAPH 5: QoS-Based Demand vs Allocation Comparison
+                    st.markdown("#### 📊 QoS Priority Allocation Analysis")
+                    
+                    # Group demands and allocations by QoS class
+                    qos_demand = {1: 0, 2: 0, 3: 0}  # Emergency, Premium, Standard
+                    qos_allocated = {1: 0, 2: 0, 3: 0}
+                    qos_count = {1: 0, 2: 0, 3: 0}
+                    
+                    # Calculate actual allocated bandwidth per QoS class
+                    for demand in optimizer.traffic_demands:
+                        qos_class = demand.qos_class.value
+                        qos_demand[qos_class] += demand.demand
+                        qos_count[qos_class] += 1
+                        
+                        # Find allocated bandwidth for this demand
+                        dest_node = demand.destination
+                        allocated = 0
+                        for (demand_id, src, dst), flow in optimizer.flows.items():
+                            if demand_id == demand.id and dst == dest_node:
+                                allocated += flow
+                        qos_allocated[qos_class] += allocated
+                    
+                    qos_names = {1: 'Emergency', 2: 'Premium', 3: 'Standard'}
+                    
+                    fig_qos = go.Figure()
+                    
+                    # Demand bars
+                    fig_qos.add_trace(go.Bar(
+                        name='Demanded',
+                        x=[qos_names[k] for k in sorted(qos_demand.keys())],
+                        y=[qos_demand[k] for k in sorted(qos_demand.keys())],
+                        marker_color='rgba(255, 107, 107, 0.7)',
+                        text=[f'{qos_demand[k]:.0f} Mbps' for k in sorted(qos_demand.keys())],
+                        textposition='auto',
+                    ))
+                    
+                    # Allocated bars
+                    fig_qos.add_trace(go.Bar(
+                        name='Allocated',
+                        x=[qos_names[k] for k in sorted(qos_allocated.keys())],
+                        y=[qos_allocated[k] for k in sorted(qos_allocated.keys())],
+                        marker_color='rgba(78, 205, 196, 0.9)',
+                        text=[f'{qos_allocated[k]:.0f} Mbps' for k in sorted(qos_allocated.keys())],
+                        textposition='auto',
+                    ))
+                    
+                    fig_qos.update_layout(
+                        title='<b>QoS Class: Demand vs Allocated Bandwidth</b>',
+                        xaxis_title='<b>QoS Class</b>',
+                        yaxis_title='<b>Bandwidth (Mbps)</b>',
+                        barmode='group',
+                        height=400,
+                        legend=dict(x=0.7, y=0.98),
+                        hovermode='x unified'
+                    )
+                    
+                    st.plotly_chart(fig_qos, use_container_width=True, key=f"qos_allocation_{net_key}")
+                    
+                    # Calculate satisfaction rates per QoS
+                    satisfaction_rates = {}
+                    for qos_class in [1, 2, 3]:
+                        if qos_demand[qos_class] > 0:
+                            satisfaction_rates[qos_names[qos_class]] = (qos_allocated[qos_class] / qos_demand[qos_class] * 100)
+                        else:
+                            satisfaction_rates[qos_names[qos_class]] = 0
+                    
+                    st.success(f"**Priority Optimization Proof:**")
+                    st.write(f"• Emergency: {satisfaction_rates['Emergency']:.1f}% satisfied ({qos_count[1]} users)")
+                    st.write(f"• Premium: {satisfaction_rates['Premium']:.1f}% satisfied ({qos_count[2]} users)")
+                    st.write(f"• Standard: {satisfaction_rates['Standard']:.1f}% satisfied ({qos_count[3]} users)")
+                
+                with col2:
+                    # GRAPH 6: Link Load vs Capacity Scatter Plot
+                    st.markdown("#### 🔗 Link Optimization Efficiency")
+                    
+                    # Extract real link data
+                    link_capacities = []
+                    link_loads = []
+                    link_names = []
+                    link_utils = []
+                    
+                    for (src, dst), link in optimizer.links.items():
+                        if link.capacity > 0:
+                            link_capacities.append(link.capacity)
+                            link_loads.append(link.current_load)
+                            link_names.append(f"{src}→{dst}")
+                            link_utils.append(link.current_load / link.capacity * 100)
+                    
+                    # Create scatter plot
+                    fig_scatter = go.Figure()
+                    
+                    # Add scatter points colored by utilization
+                    fig_scatter.add_trace(go.Scatter(
+                        x=link_capacities,
+                        y=link_loads,
+                        mode='markers',
+                        marker=dict(
+                            size=10,
+                            color=link_utils,
+                            colorscale='RdYlGn_r',  # Red (high) to Green (low)
+                            colorbar=dict(title="Utilization<br>(%)", ticksuffix="%"),
+                            line=dict(width=1, color='white'),
+                            showscale=True
+                        ),
+                        text=[f"{name}<br>Capacity: {cap:.0f} Mbps<br>Load: {load:.0f} Mbps<br>Utilization: {util:.1f}%" 
+                              for name, cap, load, util in zip(link_names, link_capacities, link_loads, link_utils)],
+                        hovertemplate='%{text}<extra></extra>',
+                        showlegend=False
+                    ))
+                    
+                    # Add ideal efficiency line (y=x)
+                    max_cap = max(link_capacities) if link_capacities else 1000
+                    fig_scatter.add_trace(go.Scatter(
+                        x=[0, max_cap],
+                        y=[0, max_cap],
+                        mode='lines',
+                        line=dict(color='red', width=2, dash='dash'),
+                        name='100% Utilization',
+                        showlegend=True
+                    ))
+                    
+                    # Add 80% utilization line
+                    fig_scatter.add_trace(go.Scatter(
+                        x=[0, max_cap],
+                        y=[0, max_cap * 0.8],
+                        mode='lines',
+                        line=dict(color='orange', width=2, dash='dot'),
+                        name='80% Utilization',
+                        showlegend=True
+                    ))
+                    
+                    fig_scatter.update_layout(
+                        title='<b>Link Load vs Capacity (Optimization Efficiency)</b>',
+                        xaxis_title='<b>Link Capacity (Mbps)</b>',
+                        yaxis_title='<b>Allocated Load (Mbps)</b>',
+                        height=400,
+                        hovermode='closest',
+                        legend=dict(x=0.02, y=0.98)
+                    )
+                    
+                    st.plotly_chart(fig_scatter, use_container_width=True, key=f"link_scatter_{net_key}")
+                    
+                    # Stats
+                    avg_util = np.mean(link_utils) if link_utils else 0
+                    underutilized = sum(1 for u in link_utils if u < 50)
+                    optimal = sum(1 for u in link_utils if 50 <= u <= 80)
+                    congested = sum(1 for u in link_utils if u > 80)
+                    
+                    st.success(f"**Load Balancing Proof:**")
+                    st.write(f"• Average Utilization: {avg_util:.1f}%")
+                    st.write(f"• Optimal Range (50-80%): {optimal} links")
+                    st.write(f"• Underutilized (<50%): {underutilized} links")
+                    st.write(f"• Congested (>80%): {congested} links")
+                
+                st.markdown("---")
+                
+                # Second row: Original throughput and utilization graphs
                 col1, col2 = st.columns(2)
                 
                 with col1:
