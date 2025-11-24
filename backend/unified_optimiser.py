@@ -71,7 +71,7 @@ class ConvergenceTracker:
     
 class UnifiedOptimizer:
 
-    # The ultimate bandwidth allocation optimizer which combines everything: multi-objective, robust, all constraints.
+    # The  bandwidth allocation optimizer which combines everything: multi-objective, robust, all constraints.
    
     
     def __init__(self, n_users: int, total_capacity: float):

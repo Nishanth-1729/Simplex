@@ -62,13 +62,10 @@ class DataGenerator:
             'priority': priorities,
             'min_bandwidth_mbps': min_bw,
             'max_bandwidth_mbps': max_bw,
-            'user_type_code': [1 if t == TierType.EMERGENCY.value else 
-                              2 if t == TierType.PREMIUM.value else 3 
-                              for t in tiers],
-            'allocation_weight': [3.0 if t == TierType.EMERGENCY.value else 
-                                 2.0 if t == TierType.PREMIUM.value else 1.0 
-                                 for t in tiers],
-            'user_type_name': [t.title() for t in tiers]
+            'region': np.random.choice(['North', 'South', 'East', 'West', 'Central'], n_users),
+            'device_type': np.random.choice(['Mobile', 'Desktop', 'Tablet', 'IoT', 'Server'], n_users),
+            'connection_time_hrs': np.random.uniform(0.5, 24, n_users).round(2),
+            'packet_loss_pct': np.random.uniform(0.01, 2.5, n_users).round(2)
         })
         
         return df

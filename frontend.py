@@ -171,33 +171,30 @@ def unified_optimiser_page():
     
     st.markdown("Configuration Panel")
     
-    # Basic Configuration
-    col1, col2, col3 = st.columns(3)
+    # Use 100% of dataset
+    n_users = len(df)
+    total_capacity = float(df['base_demand_mbps'].sum() * 0.75)
+    
+    # Display dataset info
+    st.info(f"📊 Using entire dataset: **{n_users:,} users** | Total Capacity: **{total_capacity:,.0f} Mbps** (75% of total demand)")
+    
+    # Utility Function Configuration
+    col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### Users")
-        n_users = st.slider("Number of Users", 
-                           min_value=10, 
-                           max_value=min(5000, len(df)), 
-                           value=min(1000, len(df)))
-        
-    with col2:
-        st.markdown("### Capacity")
-        total_capacity = st.number_input(
-            "Total Bandwidth (Mbps)",
-            min_value=100.0,
-            max_value=1000000.0,
-            value=float(df['base_demand_mbps'].head(n_users).sum() * 0.75))
-    
-    with col3:
-        st.markdown("### Utility")
+        st.markdown("### Utility Function")
         utility_type = st.selectbox(
             "Utility Function",
             ["log", "sqrt", "linear", "alpha-fair"])
         
+    with col2:
         alpha = 0.5
         if utility_type == "alpha-fair":
+            st.markdown("### Alpha Parameter")
             alpha = st.slider("Alpha", 0.1, 2.0, 0.5, 0.1)
+        else:
+            st.markdown("### ")
+            st.write("")  # Placeholder for layout
     
     st.markdown("---")
     st.markdown("### Multi-Objective Weights")
@@ -222,7 +219,7 @@ def unified_optimiser_page():
     with col1:
         uncertainty_type = st.selectbox(
             "Uncertainty Model",
-            ["budget", "box", "ellipsoidal", "none"],
+            ["budget", "box", "none"],
             help="How to handle demand uncertainty")
     
     with col2:
@@ -261,11 +258,11 @@ def unified_optimiser_page():
                 use_container_width=True):
         
         with st.spinner("PROGRAM IS RUNNING..."):
-            subset_df = df.head(n_users)
-            demands = subset_df['base_demand_mbps'].values
-            priorities = subset_df['priority'].values
-            min_bw = subset_df['min_bandwidth_mbps'].values
-            max_bw = subset_df['max_bandwidth_mbps'].values
+            # Use entire dataset (100%)
+            demands = df['base_demand_mbps'].values
+            priorities = df['priority'].values
+            min_bw = df['min_bandwidth_mbps'].values
+            max_bw = df['max_bandwidth_mbps'].values
             
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -342,75 +339,54 @@ def unified_optimiser_page():
             with col5:
                 st.metric("Jain's Index", f"{result['metrics']['jains_fairness_index']:.4f}")
             
-            st.markdown("### Multi-Objective Breakdown")
-
-            fig_gauges = make_subplots(
-                rows=1, cols=3,
-                specs=[[{'type': 'indicator'}, {'type': 'indicator'}, {'type': 'indicator'}]],
-                subplot_titles=['Fairness', 'Efficiency', 'Latency (inverted)']
-            )
-            
-            fig_gauges.add_trace(go.Indicator(
-                mode="gauge+number",
-                value=result['fairness_score'],
-                title={'text': "Fairness"},
-                gauge={'axis': {'range': [None, 1]},
-                      'bar': {'color': "#2ca02c"},
-                      'threshold': {'line': {'color': "red", 'width': 4},
-                                   'thickness': 0.75, 'value': 0.8}}
-            ), row=1, col=1)
-            
-            fig_gauges.add_trace(go.Indicator(
-                mode="gauge+number+delta",
-                value=result['efficiency_score'] * 100,
-                title={'text': "Efficiency (%)"},
-                delta={'reference': 80},
-                gauge={'axis': {'range': [None, 100]},
-                      'bar': {'color': "#1f77b4"},
-                      'threshold': {'line': {'color': "red", 'width': 4},
-                                   'thickness': 0.75, 'value': 70}}
-            ), row=1, col=2)
-            
-            # Latency (lower is better, so invert scale)
-            max_latency = 200
-            latency_score = max(0, (max_latency - result['latency_score']) / max_latency * 100)
-            fig_gauges.add_trace(go.Indicator(
-                mode="gauge+number",
-                value=latency_score,
-                title={'text': "Latency Score"},
-                gauge={'axis': {'range': [None, 100]},
-                      'bar': {'color': "#ff7f0e"},
-                      'threshold': {'line': {'color': "red", 'width': 4},
-                                   'thickness': 0.75, 'value': 60}}
-            ), row=1, col=3)
-            
-            fig_gauges.update_layout(height=300)
-            
             # Use dynamic key based on optimization timestamp
             opt_key = st.session_state.get('optimization_timestamp', 0)
-            st.plotly_chart(fig_gauges, use_container_width=True, key=f"core_gauges_{opt_key}")            # CONVERGENCE VISUALIZATION
-            st.markdown("### Convergence Analysis")
             
-            conv_viz = ConvergenceVisualizer()
+            # SATISFACTION BY PRIORITY ANALYSIS
+            st.markdown("### Satisfaction Rate by Priority Level")
             
-            st.info("Note: CVXPY solver doesn't expose real-time iteration data. " +
-                   "Showing post-optimization analysis instead.")
+            # Calculate satisfaction rate for each user
+            allocation = result['allocation']
+            satisfaction = allocation / demands
+            satisfaction = np.clip(satisfaction, 0, 1)  # Cap at 100%
             
-            # Create simulated convergence data for demonstration
-            # In a real implementation with a custom solver, you'd get actual iteration data
-            convergence_data = {
-                'iterations': list(range(1, 51)),
-                'objective_values': [result['objective_value'] * (0.5 + 0.5 * (1 - np.exp(-i/10))) 
-                                    for i in range(1, 51)],
-                'primal_residuals': [1e-6 * np.exp(-i/5) for i in range(1, 51)],
-                'dual_residuals': [1e-6 * np.exp(-i/5) for i in range(1, 51)],
-                'gaps': [1e-4 * np.exp(-i/8) for i in range(1, 51)],
-                'timestamps': [i * result['solve_time'] / 50 for i in range(1, 51)]
-            }
+            # Create box plot for each priority level
+            fig_priority = go.Figure()
             
-            fig_conv = conv_viz.create_objective_convergence_plot(convergence_data)
+            # Get unique priority levels and sort them
+            unique_priorities = sorted(np.unique(priorities))
+            colors = ['#d62728', '#ff7f0e', '#2ca02c']  # Red (Low), Orange (Mid), Green (High)
             
-            st.plotly_chart(fig_conv, use_container_width=True, key=f"core_convergence_{opt_key}")            # Comprehensive metrics
+            for idx, priority in enumerate(unique_priorities):
+                mask = priorities == priority
+                priority_satisfaction = satisfaction[mask] * 100  # Convert to percentage
+                
+                fig_priority.add_trace(go.Box(
+                    y=priority_satisfaction,
+                    name=f'Priority {int(priority)}',
+                    marker_color=colors[idx] if idx < len(colors) else '#1f77b4',
+                    boxmean='sd'  # Show mean and standard deviation
+                ))
+            
+            # Add 100% satisfaction reference line
+            fig_priority.add_hline(y=100, line_dash="dash", line_color="green", 
+                                  annotation_text="100% Satisfaction", annotation_position="right")
+            
+            fig_priority.update_layout(
+                title='<b>📊 Satisfaction Distribution by Priority Level</b>',
+                yaxis_title='<b>Satisfaction Rate (%)</b>',
+                xaxis_title='<b>Priority Level</b>',
+                height=500,
+                showlegend=False,
+                hovermode='closest',
+                plot_bgcolor='rgba(240,240,240,0.5)'
+            )
+            
+            fig_priority.update_yaxes(range=[0, 110], showgrid=True, gridwidth=1, gridcolor='LightGray')
+            
+            st.plotly_chart(fig_priority, use_container_width=True, key=f"priority_satisfaction_{opt_key}")
+            
+            # Comprehensive metrics
             st.markdown("### Detailed Statistics")
             
             metrics = result['metrics']
@@ -525,7 +501,7 @@ def unified_optimiser_page():
                     summary_df.to_excel(writer, sheet_name='Summary', index=False)
                     
                     # Tier breakdown sheet
-                    tier_breakdown = results_df.groupby('user_type_name').agg({
+                    tier_breakdown = results_df.groupby('tier').agg({
                         'user_id': 'count',
                         'base_demand_mbps': 'sum',
                         'allocated_mbps': 'sum',
@@ -568,12 +544,20 @@ def data_generation_page():
     
     #### Mathematical Formulation
     
-    **Objective:**
+    **Multi-Objective Function:**
     """)
     
     st.latex(r'''
-    \max \sum_{i=1}^{n} w_i \cdot U(x_i)
+    \max \left( \alpha_f \cdot \frac{\sum_{i=1}^{n} w_i \cdot U(x_i)}{n} + \alpha_e \cdot \frac{\sum_{i=1}^{n} x_i}{C} - \alpha_l \cdot \frac{\sum_{i=1}^{n} L(x_i)}{n \cdot 100} \right)
     ''')
+    
+    st.markdown(r"""
+    Where:
+    - $\alpha_f, \alpha_e, \alpha_l$ = weights for fairness, efficiency, latency (normalized to sum = 1)
+    - $U(x_i)$ = utility function (log, sqrt, linear, or α-fair)
+    - $L(x_i) = 10 + \frac{0.1 \cdot d_i}{x_i + \epsilon}$ = latency model
+    - $w_i$ = priority-based weights
+    """)
     
     st.markdown("**Subject to:**")
     
@@ -581,7 +565,8 @@ def data_generation_page():
     \begin{aligned}
     &\sum_{i=1}^{n} x_i \leq C & \text{(Capacity)} \\
     &x_{i,\min} \leq x_i \leq x_{i,\max} & \text{(Min/Max limits)} \\
-    &x_i \geq 0 & \text{(Non-negativity)}
+    &x_i \geq 0.1 \cdot d_i & \text{(Min 10\% satisfaction)} \\
+    &x_i \geq \theta \cdot x_{i,\min} & \text{(Fairness threshold)}
     \end{aligned}
     ''')
     
@@ -641,8 +626,8 @@ def data_generation_page():
         col1, col2 = st.columns(2)
         
         with col1:
-            # User Type Distribution
-            type_dist = df['user_type_name'].value_counts()
+            # User Type Distribution (by tier)
+            type_dist = df['tier'].value_counts()
             fig_type = go.Figure(data=[
                 go.Bar(
                     x=type_dist.index,
@@ -662,27 +647,35 @@ def data_generation_page():
             st.plotly_chart(fig_type, use_container_width=True)
         
         with col2:
-            # Priority Distribution - group by priority ranges
-            priority_bins = pd.cut(df['priority'], bins=[0, 5, 8, 10], labels=['Low (1-5)', 'Medium (6-8)', 'High (9-10)'])
-            priority_grouped = priority_bins.value_counts().sort_index()
+            # Demand Distribution
+            fig_demand = go.Figure()
             
-            fig_priority = go.Figure(data=[
-                go.Bar(
-                    x=priority_grouped.index.astype(str),
-                    y=priority_grouped.values,
-                    marker_color=['#4CAF50', '#FF9800', '#F44336'],
-                    text=priority_grouped.values,
-                    textposition='auto',
-                )
-            ])
-            fig_priority.update_layout(
-                title='Priority Distribution',
-                xaxis_title='Priority Level',
-                yaxis_title='Count',
+            fig_demand.add_trace(go.Histogram(
+                x=df['base_demand_mbps'],
+                nbinsx=30,
+                marker_color='#2196F3',
+                opacity=0.75,
+                name='Demand Distribution'
+            ))
+            
+            # Add mean line
+            mean_demand = df['base_demand_mbps'].mean()
+            fig_demand.add_vline(
+                x=mean_demand, 
+                line_dash="dash", 
+                line_color="red",
+                annotation_text=f"Mean: {mean_demand:.1f} Mbps",
+                annotation_position="top right"
+            )
+            
+            fig_demand.update_layout(
+                title='Bandwidth Demand Distribution',
+                xaxis_title='Demand (Mbps)',
+                yaxis_title='Number of Users',
                 height=400,
                 showlegend=False
             )
-            st.plotly_chart(fig_priority, use_container_width=True)
+            st.plotly_chart(fig_demand, use_container_width=True)
 
         st.markdown("#### Sample User Data")
         st.dataframe(df.head(20), use_container_width=True)
@@ -1408,141 +1401,6 @@ def network_topology_page():
                     
                     balanced_links = sum(1 for u in utilizations if 30 <= u <= 80)
                     st.success(f"**Load Balancing:** {balanced_links}/{len(utilizations)} links in optimal range (30-80%)")
-                
-                # Fairness and QoS achievement
-                st.markdown("#### Fairness & QoS Achievement")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                # Group demands by QoS
-                qos_stats = {1: {'demand': 0, 'allocated': 0, 'count': 0},
-                            2: {'demand': 0, 'allocated': 0, 'count': 0},
-                            3: {'demand': 0, 'allocated': 0, 'count': 0}}
-                
-                for demand in optimizer.traffic_demands:
-                    qos_val = demand.qos_class.value
-                    qos_stats[qos_val]['demand'] += demand.demand
-                    qos_stats[qos_val]['count'] += 1
-                    
-                    # Calculate allocated from flows
-                    if hasattr(optimizer, 'flows') and demand.id in optimizer.flows:
-                        qos_stats[qos_val]['allocated'] += sum(optimizer.flows[demand.id].values())
-                
-                qos_names = {1: ' Emergency', 2: 'Premium', 3: 'Standard'}
-                qos_colors = {1: '#FF1744', 2: '#2196F3', 3: '#4CAF50'}
-                
-                for qos_val, col in zip([1, 2, 3], [col1, col2, col3]):
-                    with col:
-                        stats = qos_stats[qos_val]
-                        satisfaction = (stats['allocated'] / stats['demand'] * 100) if stats['demand'] > 0 else 0
-                        
-                        fig_qos = go.Figure(go.Indicator(
-                            mode="gauge+number",
-                            value=satisfaction,
-                            domain={'x': [0, 1], 'y': [0, 1]},
-                            title={'text': qos_names[qos_val]},
-                            gauge={
-                                'axis': {'range': [None, 100]},
-                                'bar': {'color': qos_colors[qos_val]},
-                                'steps': [
-                                    {'range': [0, 50], 'color': "lightgray"},
-                                    {'range': [50, 80], 'color': "gray"}
-                                ],
-                                'threshold': {
-                                    'line': {'color': "green", 'width': 4},
-                                    'thickness': 0.75,
-                                    'value': 90
-                                }
-                            }
-                        ))
-                        fig_qos.update_layout(height=250)
-                        st.plotly_chart(fig_qos, use_container_width=True, key=f"qos_{qos_val}_{net_key}")
-                        
-                        st.metric(f"Users", stats['count'])
-                        st.metric(f"Satisfaction", f"{satisfaction:.1f}%")
-                
-                # Latency optimization
-                st.markdown("#### Latency Optimization")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Latency distribution
-                    latencies = [link.latency for link in optimizer.links.values()]
-                    
-                    fig_latency = go.Figure()
-                    fig_latency.add_trace(go.Box(
-                        y=latencies,
-                        name="Link Latency",
-                        marker_color='#FF6B9D',
-                        boxmean='sd'
-                    ))
-                    
-                    fig_latency.update_layout(
-                        title=" Network Latency Distribution",
-                        yaxis_title="Latency (ms)",
-                        height=300,
-                        showlegend=False
-                    )
-                    
-                    st.plotly_chart(fig_latency, use_container_width=True, key=f"opt_latency_{net_key}")
-                    
-                    avg_latency = sum(latencies) / len(latencies) if latencies else 0
-                    max_latency = max(latencies) if latencies else 0
-                    st.success(f" **Avg Latency:** {avg_latency:.2f} ms")
-                    st.success(f" **Max Latency:** {max_latency:.2f} ms")
-                
-                with col2:
-                    # Optimization objectives achievement
-                    if 'objectives' in result:
-                        obj = result['objectives']
-                        
-                        achievement_scores = []
-                        achievement_labels = []
-                        
-                        if obj['throughput_weight'] > 0:
-                            throughput_score = min(100, (total_allocated / total_demand * 100)) if total_demand > 0 else 0
-                            achievement_scores.append(throughput_score)
-                            achievement_labels.append('Throughput')
-                        
-                        if obj['latency_weight'] > 0:
-                            # Lower latency is better, so invert the score
-                            latency_score = max(0, 100 - (avg_latency / 10))  # Assuming 100ms is very bad
-                            achievement_scores.append(latency_score)
-                            achievement_labels.append('Latency')
-                        
-                        if obj['fairness_weight'] > 0:
-                            fairness_score = metrics.get('jains_fairness_index', 0) * 100
-                            achievement_scores.append(fairness_score)
-                            achievement_labels.append('Fairness')
-                        
-                        fig_achievement = go.Figure()
-                        
-                        fig_achievement.add_trace(go.Bar(
-                            x=achievement_labels,
-                            y=achievement_scores,
-                            marker_color=['#FF6B6B', '#4ECDC4', '#95E1D3'][:len(achievement_labels)],
-                            text=[f'{score:.1f}%' for score in achievement_scores],
-                            textposition='auto'
-                        ))
-                        
-                        fig_achievement.update_layout(
-                            title="Multi-Objective Achievement Scores",
-                            yaxis_title="Achievement (%)",
-                            yaxis_range=[0, 100],
-                            height=300,
-                            showlegend=False
-                        )
-                        
-                        fig_achievement.add_hline(y=90, line_dash="dash", line_color="green",
-                                                 annotation_text="90% target")
-                        
-                        st.plotly_chart(fig_achievement, use_container_width=True, key=f"opt_achievement_{net_key}")
-                        
-                        overall_achievement = sum(achievement_scores) / len(achievement_scores) if achievement_scores else 0
-                        st.success(f"**Overall Achievement:** {overall_achievement:.1f}%")
-                    else:
-                        st.info("Run optimization with multiple objectives to see achievement scores")
             
             with tab2:
                 st.markdown("### Interactive 3D Network Topology")
