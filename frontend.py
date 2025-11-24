@@ -8,6 +8,7 @@ import sys
 import os
 from datetime import datetime
 import time as time_module
+import streamlit.components.v1 as components
 import io
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
@@ -339,11 +340,25 @@ def unified_optimiser_page():
             # Use dynamic key based on optimization timestamp
             opt_key = st.session_state.get('optimization_timestamp', 0)
             
+            # Display optimization configuration used
+            st.markdown("### Optimization Configuration")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Fairness Weight", f"{result.get('weight_fairness', 0):.2f}")
+            with col2:
+                st.metric("Efficiency Weight", f"{result.get('weight_efficiency', 0):.2f}")
+            with col3:
+                st.metric("Latency Weight", f"{result.get('weight_latency', 0):.2f}")
+            with col4:
+                st.metric("Utility Function", result.get('utility_type', 'N/A').upper())
+            
             # SATISFACTION HEATMAP ANALYSIS
             st.markdown("### Satisfaction Heatmap: Priority vs Demand Range")
             
             # Calculate satisfaction rate for each user
             allocation = result['allocation']
+            demands = st.session_state['unified_demands']
+            priorities = df['priority'].values
             satisfaction = allocation / demands
             satisfaction = np.clip(satisfaction, 0, 1) * 100  # Convert to percentage
             
@@ -415,6 +430,7 @@ def unified_optimiser_page():
             
             # Allocation visualization
             st.markdown("### Allocation Distribution")
+            st.info(f"**Distribution Summary:** Mean Allocation={allocation.mean():.2f} Mbps | Std Dev={allocation.std():.2f} Mbps | Total Allocated={allocation.sum():.0f} Mbps")
             
             allocation = result['allocation']
             demands = st.session_state['unified_demands']
@@ -438,7 +454,7 @@ def unified_optimiser_page():
             ))
             
             fig_dist.update_layout(
-                title='Allocation vs Demand Distribution',
+                title=f'Allocation vs Demand Distribution (Weights: F={result.get("weight_fairness", 0):.2f}, E={result.get("weight_efficiency", 0):.2f}, L={result.get("weight_latency", 0):.2f})',
                 xaxis_title='Bandwidth (Mbps)',
                 yaxis_title='Number of Users',
                 barmode='overlay',
@@ -1193,6 +1209,25 @@ def network_topology_page():
                 "Network Analysis",
                 "Detailed Stats"
             ])
+
+            # Hide specific tabs in the UI (Metrics Dashboard, Network Analysis, Detailed Stats)
+            # We use a small JS snippet injected via components.html to hide the tab elements by label.
+            # This keeps the backend code intact while removing those tabs from the rendered UI.
+            components.html('''
+            <script>
+            (function hideTabs(){
+                const labels = ['Metrics Dashboard','Network Analysis','Detailed Stats'];
+                // query for role=tab elements (Streamlit renders tabs with role="tab")
+                const tabs = window.parent.document.querySelectorAll('[role="tab"]');
+                tabs.forEach(t => {
+                    try {
+                        const text = t.innerText ? t.innerText.trim() : '';
+                        if(labels.includes(text)) t.style.display = 'none';
+                    } catch(e) { /* ignore cross-origin / timing errors */ }
+                });
+            })();
+            </script>
+            ''', height=0)
             
             # Create visualizer
             viz = NetworkVisualizer()

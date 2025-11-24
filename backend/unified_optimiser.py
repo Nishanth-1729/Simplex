@@ -326,6 +326,13 @@ class UnifiedOptimizer:
                     'efficiency_score': efficiency_value,
                     'latency_score': latency_value,
                     
+                    # Store weights used
+                    'weight_fairness': weight_fairness,
+                    'weight_efficiency': weight_efficiency,
+                    'weight_latency': weight_latency,
+                    'utility_type': utility_type,
+                    'alpha': alpha,
+                    
                     # Comprehensive metrics
                     'metrics': metrics,
                     
